@@ -76,7 +76,7 @@ dbt/models/marts/, dbt/models/quality/, dbt/tests/                # agregados, v
 tests/test_transactions_pipeline.py                               # pruebas locales sin Docker
 ```
 
-La base `warehouse` contiene `raw.ingestion_batches` y `raw.customer_transactions` (**originales, columnas de texto**). El contrato de consumo principal son **tablas reales** en `public`: `fact_transactions` (una transacción válida), `dim_product` (un producto) y `dim_customers` (un cliente conocido con `first_transaction_date` y `last_transaction_date`). El CSV no incluye nombre, email ni dirección de cliente; no se inventan. Los agregados siguen en `analytics_marts`. Para consultas antiguas, `analytics_marts.fact_table` y `analytics_marts.dim_table` continúan disponibles como **vistas de compatibilidad**; nuevas consultas deben usar `public`.
+La base `warehouse` contiene `raw.ingestion_batches` y `raw.customer_transactions` (**originales, columnas de texto**). El contrato de consumo principal son **tablas reales** en `public`: `fact_transactions` (una transacción válida), `dim_product` (un producto) y `dim_customers` (un cliente conocido con `first_transaction_date` y `last_transaction_date`). El CSV no incluye nombre, email ni dirección de cliente; no se inventan.
 
 ## Consultas de verificación
 
