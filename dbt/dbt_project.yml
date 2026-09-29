@@ -1,0 +1,26 @@
+name: customer_transactions
+version: '1.0.0'
+config-version: 2
+profile: warehouse
+
+model-paths: ["models"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages", "logs"]
+
+models:
+  customer_transactions:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: staging
+      +materialized: view
+    public:
+      +schema: public
+      +materialized: table
+    marts:
+      +schema: marts
+      +materialized: table
+    quality:
+      +schema: quality
+      +materialized: table

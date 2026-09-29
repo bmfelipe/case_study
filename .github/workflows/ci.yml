@@ -1,0 +1,46 @@
+name: pipeline-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit tests and syntax
+        run: |
+          python -m unittest discover -s tests -v
+          python -m compileall -q airflow tests
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Compose configuration
+        run: docker compose config --quiet
+      - name: Build, initialize and test entire DAG
+        run: |
+          docker compose up --build -d postgres airflow-init
+          docker compose run --rm airflow-scheduler airflow dags test customer_transactions 2023-07-21
+      - name: Assert public dimensional model and batch reconciliation
+        run: |
+          actual="$(docker compose exec -T postgres psql -U pipeline -d warehouse -Atqc \
+            "SELECT (SELECT count(*) FROM raw.customer_transactions)::text || '|' || \
+                    (SELECT count(*) FROM public.fact_transactions)::text || '|' || \
+                    (SELECT count(*) FROM analytics_quality.rejected_transactions)::text || '|' || \
+                    (SELECT count(*) FROM public.dim_customers)::text || '|' || \
+                    (SELECT count(*) FROM public.dim_product)::text")"
+          echo "raw|accepted|rejected|customers|products = $actual"
+          test "$actual" = "100|71|29|10|5"
+      - name: Diagnose failures
+        if: failure()
+        run: docker compose logs --tail=150 postgres airflow-init airflow-scheduler
+      - name: Clean ephemeral CI volumes
+        if: always()
+        run: docker compose down -v --remove-orphans

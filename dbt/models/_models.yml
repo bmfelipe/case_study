@@ -1,0 +1,89 @@
+version: 2
+
+models:
+  - name: stg_transactions
+    description: Una fila por registro original del lote elegido; conversiones seguras y razones de invalidez.
+    columns:
+      - name: batch_id
+        data_tests: [not_null]
+      - name: source_row_number
+        data_tests: [not_null]
+  - name: int_classified_transactions
+    description: Clasifica duplicados y nombres contradictorios sin elegir valores arbitrarios.
+  - name: dim_product
+    description: Dimensión pública, un producto con nombre canónico coherente por product_id.
+    columns:
+      - name: product_id
+        data_tests: [not_null, unique]
+      - name: product_name
+        data_tests: [not_null]
+  - name: dim_customers
+    description: Dimensión pública, un cliente conocido con la primera y última fecha de compra válida del lote.
+    columns:
+      - name: customer_id
+        data_tests: [not_null, unique]
+      - name: first_transaction_date
+        data_tests: [not_null]
+      - name: last_transaction_date
+        data_tests: [not_null]
+  - name: fact_transactions
+    description: Hechos públicos; una transacción válida por fila, precio unitario e impuesto absoluto por transacción.
+    columns:
+      - name: batch_id
+        data_tests: [not_null]
+      - name: source_row_number
+        data_tests: [not_null]
+      - name: transaction_id
+        data_tests: [not_null, unique]
+      - name: transaction_date
+        data_tests: [not_null]
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_product')
+              field: product_id
+      - name: customer_id
+        description: Nulo cuando la fuente no identifica al cliente; no se inventa una clave.
+        data_tests:
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+      - name: quantity
+        data_tests: [not_null]
+      - name: unit_price
+        data_tests: [not_null]
+      - name: tax_amount
+        data_tests: [not_null]
+  - name: dim_table
+    description: Vista de compatibilidad con el antiguo nombre de producto; usar public.dim_product.
+  - name: fact_table
+    description: Vista de compatibilidad con el antiguo nombre de hechos; usar public.fact_transactions.
+  - name: agg_monthly
+    description: Mes calendario; incluye transacciones de clientes anónimos si sus importes son válidos.
+    columns:
+      - name: month_start
+        data_tests: [not_null, unique]
+  - name: agg_customer_monthly
+    description: Mes y cliente conocido; no asigna cliente a transacciones sin identificador.
+    columns:
+      - name: month_start
+        data_tests: [not_null]
+      - name: customer_id
+        data_tests: [not_null]
+  - name: rejected_transactions
+    description: Una fila por registro excluido, con todos los valores originales y motivos.
+    columns:
+      - name: batch_id
+        data_tests: [not_null]
+      - name: source_row_number
+        data_tests: [not_null]
+  - name: quality_events
+    description: Una fila por alerta (error o warning) y registro original para observabilidad.
+    columns:
+      - name: severity
+        data_tests:
+          - accepted_values:
+              values: ['error', 'warning']
+      - name: issue_code
+        data_tests: [not_null]

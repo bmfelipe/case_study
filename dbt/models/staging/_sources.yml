@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: Lotes append-only y valores originales del CSV, sin coerción.
+    tables:
+      - name: ingestion_batches
+        description: Un lote por hash del archivo; batch_id define la versión vigente.
+        columns:
+          - name: batch_id
+            data_tests: [not_null, unique]
+          - name: file_sha256
+            data_tests: [not_null, unique]
+      - name: customer_transactions
+        description: Una fila por registro del CSV, incluido el número de registro lógico.
+        columns:
+          - name: batch_id
+            data_tests: [not_null]
+          - name: source_row_number
+            data_tests: [not_null]

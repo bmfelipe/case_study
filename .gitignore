@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+.venv/

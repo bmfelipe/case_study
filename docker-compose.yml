@@ -1,0 +1,116 @@
+name: customer-transactions
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile.airflow
+  image: customer-transactions-airflow:local
+  user: "50000:0"
+  environment: &airflow-environment
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://pipeline:${POSTGRES_PASSWORD:-local_only_change_me}@postgres:5432/airflow
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-local-dev-key-not-for-production}
+    AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
+    AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+    PGHOST: postgres
+    PGPORT: "5432"
+    PGUSER: pipeline
+    PGPASSWORD: ${POSTGRES_PASSWORD:-local_only_change_me}
+    PGDATABASE: warehouse
+    SOURCE_URL: ${SOURCE_URL:-}
+    SOURCE_ALLOWED_HOSTS: ${SOURCE_ALLOWED_HOSTS:-}
+    PYTHONPATH: /opt/airflow/include
+    DBT_PROFILES_DIR: /opt/airflow/dbt
+    DBT_TARGET_PATH: /tmp/dbt-target
+    DBT_LOG_PATH: /tmp/dbt-logs
+  volumes: &airflow-volumes
+    - ./airflow/dags:/opt/airflow/dags:ro
+    - ./airflow/include:/opt/airflow/include:ro
+    - ./dbt:/opt/airflow/dbt:ro
+    - ./customer_transactions.csv:/opt/airflow/data/customer_transactions.csv:ro
+    - airflow-logs:/opt/airflow/logs
+    - snapshots:/opt/airflow/shared
+  depends_on: &airflow-depends-on
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16.6
+    environment:
+      POSTGRES_USER: pipeline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_only_change_me}
+      POSTGRES_DB: airflow
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      # TCP + consulta real: pg_isready por socket anuncia éxito mientras
+      # postgres sigue ejecutando los scripts de initdb.
+      test: ["CMD-SHELL", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" psql -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d warehouse -Atqc \"SELECT (to_regclass('raw.ingestion_batches') IS NOT NULL AND to_regclass('raw.customer_transactions') IS NOT NULL)::int\" | grep -qx 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    depends_on: *airflow-depends-on
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        airflow db migrate
+        if ! airflow users list | grep -Fq "${AIRFLOW_ADMIN_USER:-admin}"; then
+          airflow users create \
+            --username "$${AIRFLOW_ADMIN_USER}" \
+            --password "$${AIRFLOW_ADMIN_PASSWORD}" \
+            --firstname Local --lastname Admin --role Admin \
+            --email admin@localhost
+        fi
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Herramienta interactiva opcional: docker compose run --rm dbt build
+  # El DAG usa la misma instalación aislada de dbt dentro de la imagen de Airflow.
+  dbt:
+    <<: *airflow-common
+    profiles: ["tools"]
+    entrypoint: ["/opt/dbt-venv/bin/dbt"]
+    command: ["--version"]
+    restart: "no"
+
+volumes:
+  postgres-data:
+  airflow-logs:
+  snapshots:
