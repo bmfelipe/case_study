@@ -130,5 +130,3 @@ python -m compileall -q airflow tests
 El workflow `.github/workflows/ci.yml` automatiza ambos niveles al hacer push/PR: pruebas unitarias y un test de integración en el runner Linux (`docker compose`, `airflow dags test`, dbt y aserción `100|71|29|10|5`). **El workflow aún no se ha ejecutado en GitHub Actions**; la integración local en Docker sí se verificó.
 
 > Los ficheros SQL incluyen Jinja (`{{ ref(...) }}`) y sintaxis PostgreSQL (`::numeric`, `FILTER`): un linter SQL genérico de VS Code puede marcarlos incorrectamente. Su prueba real es `dbt build` en los contenedores.
-
-**Antes de enviar el enlace del repositorio:** validar el despliegue en una máquina con Docker, confirmar todas las consultas/tests, versionar los archivos nuevos y hacer push. No se han publicado cambios en Git automáticamente.
